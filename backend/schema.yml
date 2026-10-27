@@ -1,0 +1,1470 @@
+openapi: 3.0.3
+info:
+  title: Amrutam Telemedicine Platform API
+  version: 1.0.0
+  description: Enterprise Telemedicine REST API featuring strict RBAC, transactional
+    booking with pessimistic locking, idempotency protection, consultation workflows,
+    and operational metrics.
+paths:
+  /api/v1/admin/analytics/consultations:
+    get:
+      operationId: admin_analytics_consultations_retrieve
+      description: Time-series consultation trends for Recharts dashboard visualizations.
+      summary: Daily consultation trend analytics
+      parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+        description: 'Number of past days to analyze (default: 14)'
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/admin/analytics/overview:
+    get:
+      operationId: admin_analytics_overview_retrieve
+      description: |-
+        Administrator overview metrics: user counts, active doctors, consultation counts by status,
+        revenue totals, and cancellation rates.
+      summary: Platform operational and clinical metrics overview
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/admin/audit-logs:
+    get:
+      operationId: admin_audit_logs_list
+      description: Administrator endpoint to view immutable system audit trails.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+          description: ''
+  /api/v1/auth/login:
+    post:
+      operationId: auth_login_create
+      description: Authenticates user with email and password, returning JWT access
+        & refresh tokens.
+      summary: User login (JWT)
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPairRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/logout:
+    post:
+      operationId: auth_logout_create
+      description: Logs out the user by blacklisting their refresh token.
+      summary: User logout and token revocation
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/me:
+    get:
+      operationId: auth_me_retrieve
+      description: Returns the currently authenticated user's profile and permissions.
+      summary: Current authenticated user details
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/auth/refresh:
+    post:
+      operationId: auth_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/auth/register:
+    post:
+      operationId: auth_register_create
+      description: |-
+        Public registration endpoint. Exclusively creates accounts with the PATIENT role.
+        Privileged DOCTOR or ADMIN roles cannot be self-assigned.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRegister'
+          description: ''
+  /api/v1/bookings:
+    get:
+      operationId: bookings_retrieve
+      description: List appointments or book a new appointment with transaction safety
+        and idempotency protection.
+      summary: List appointments for authenticated user
+      tags:
+      - bookings
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: bookings_create
+      description: List appointments or book a new appointment with transaction safety
+        and idempotency protection.
+      summary: Book an appointment (Transaction-safe & Idempotent)
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: Unique client-generated idempotency UUID/token
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BookingCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BookingCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bookings/{id}:
+    get:
+      operationId: bookings_retrieve_2
+      description: Retrieve details of a specific booking with strict resource authorization.
+      summary: Retrieve booking details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bookings/{id}/cancel:
+    post:
+      operationId: bookings_cancel_create
+      description: Cancel an appointment and safely release the occupied slot.
+      summary: Cancel an appointment
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCancelRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BookingCancelRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BookingCancelRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/consultations:
+    get:
+      operationId: consultations_retrieve
+      description: List consultations for the authenticated user based on role.
+      summary: List consultations
+      tags:
+      - consultations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/consultations/{id}:
+    get:
+      operationId: consultations_retrieve_2
+      description: Retrieve specific consultation with strict role-based tenant checks.
+      summary: Retrieve consultation details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - consultations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/consultations/{id}/complete:
+    post:
+      operationId: consultations_complete_create
+      description: Assigned doctor marks the consultation as COMPLETED.
+      summary: Complete consultation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - consultations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultationCompleteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConsultationCompleteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConsultationCompleteRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/consultations/{id}/prescriptions:
+    post:
+      operationId: consultations_prescriptions_create
+      description: 'POST: Assigned doctor creates a prescription for an active or
+        completed consultation.'
+      summary: Create prescription for consultation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - consultations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrescriptionCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PrescriptionCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PrescriptionCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/consultations/{id}/start:
+    post:
+      operationId: consultations_start_create
+      description: Assigned doctor starts the clinical consultation, moving status
+        to IN_PROGRESS.
+      summary: Start consultation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - consultations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultationStartRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConsultationStartRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConsultationStartRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/doctors:
+    get:
+      operationId: doctors_list
+      description: |-
+        Public directory of verified and active doctors.
+        Supports filtering by name, specialization, fee range, and date.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - doctors
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDoctorProfileList'
+          description: ''
+  /api/v1/doctors/{id}:
+    get:
+      operationId: doctors_retrieve
+      description: Public doctor profile retrieval.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - doctors
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorProfile'
+          description: ''
+  /api/v1/doctors/{id}/availability:
+    get:
+      operationId: doctors_availability_retrieve
+      description: Retrieves available time slots for a specific doctor.
+      summary: Get doctor availability slots
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: Filter slots by date (YYYY-MM-DD)
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - doctors
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/doctors/me/availability:
+    get:
+      operationId: doctors_me_availability_retrieve
+      description: Doctor endpoint to view all their scheduled slots and create new
+        availability slots.
+      summary: List doctor's own slots
+      tags:
+      - doctors
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: doctors_me_availability_create
+      description: Doctor endpoint to view all their scheduled slots and create new
+        availability slots.
+      summary: Create doctor availability slot
+      tags:
+      - doctors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvailabilitySlotCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AvailabilitySlotCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AvailabilitySlotCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/doctors/me/availability/{slot_id}:
+    patch:
+      operationId: doctors_me_availability_partial_update
+      description: Doctor endpoint to cancel or modify a specific availability slot.
+      summary: Cancel or modify an availability slot
+      parameters:
+      - in: path
+        name: slot_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - doctors
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/doctors/me/profile:
+    get:
+      operationId: doctors_me_profile_retrieve
+      description: Allows the logged-in doctor to inspect and update their professional
+        profile.
+      tags:
+      - doctors
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorProfileUpdate'
+          description: ''
+    put:
+      operationId: doctors_me_profile_update
+      description: Allows the logged-in doctor to inspect and update their professional
+        profile.
+      tags:
+      - doctors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorProfileUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DoctorProfileUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DoctorProfileUpdateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorProfileUpdate'
+          description: ''
+    patch:
+      operationId: doctors_me_profile_partial_update
+      description: Allows the logged-in doctor to inspect and update their professional
+        profile.
+      tags:
+      - doctors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorProfileUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorProfileUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorProfileUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorProfileUpdate'
+          description: ''
+  /api/v1/payments:
+    post:
+      operationId: payments_create
+      description: Process simulated payments for consultations with idempotency and
+        audit logs.
+      summary: Process simulated payment for consultation
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: Idempotency key
+      tags:
+      - payments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInitiateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PaymentInitiateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PaymentInitiateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/payments/{id}:
+    get:
+      operationId: payments_retrieve
+      description: Retrieve payment details by ID with tenant checks.
+      summary: Retrieve payment details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - payments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/prescriptions:
+    get:
+      operationId: prescriptions_retrieve
+      description: List prescriptions accessible to the authenticated user.
+      summary: List accessible prescriptions
+      tags:
+      - prescriptions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/prescriptions/{id}:
+    get:
+      operationId: prescriptions_retrieve_2
+      description: Retrieve details of a specific prescription with strict tenant
+        isolation.
+      summary: Retrieve prescription details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - prescriptions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users/me:
+    get:
+      operationId: users_me_retrieve
+      description: Retrieves or updates permitted profile information for the authenticated
+        user.
+      summary: Retrieve user profile
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    put:
+      operationId: users_me_update
+      description: Retrieves or updates permitted profile information for the authenticated
+        user.
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileUpdate'
+          description: ''
+    patch:
+      operationId: users_me_partial_update
+      description: Retrieves or updates permitted profile information for the authenticated
+        user.
+      summary: Update user profile
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileUpdate'
+          description: ''
+  /health/live:
+    get:
+      operationId: health_live_retrieve
+      description: 'Liveness probe: verifies process is alive and accepting connections.'
+      summary: Liveness check
+      tags:
+      - health
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /health/ready:
+    get:
+      operationId: health_ready_retrieve
+      description: 'Readiness probe: validates database connectivity and core services.'
+      summary: Readiness check
+      tags:
+      - health
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /metrics:
+    get:
+      operationId: metrics_retrieve
+      description: Exposes Prometheus metrics, protected by a shared secret header
+        or admin privileges.
+      tags:
+      - metrics
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    AccountStatusEnum:
+      enum:
+      - ACTIVE
+      - SUSPENDED
+      - DEACTIVATED
+      type: string
+      description: |-
+        * `ACTIVE` - Active
+        * `SUSPENDED` - Suspended
+        * `DEACTIVATED` - Deactivated
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+        actor_name:
+          type: string
+          readOnly: true
+        actor_email:
+          type: string
+          nullable: true
+          maxLength: 255
+        actor_role:
+          type: string
+          nullable: true
+          maxLength: 50
+        action:
+          type: string
+          maxLength: 100
+        resource_type:
+          type: string
+          maxLength: 100
+        resource_id:
+          type: string
+          nullable: true
+          maxLength: 120
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        request_id:
+          type: string
+          nullable: true
+          maxLength: 120
+        outcome:
+          $ref: '#/components/schemas/OutcomeEnum'
+        ip_address:
+          type: string
+          nullable: true
+        sanitized_metadata: {}
+      required:
+      - action
+      - actor_id
+      - actor_name
+      - id
+      - resource_type
+      - timestamp
+    AvailabilitySlotCreateRequest:
+      type: object
+      properties:
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+      required:
+      - end_at
+      - start_at
+    BookingCancelRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          default: Cancelled by user
+    BookingCreateRequest:
+      type: object
+      properties:
+        slot_id:
+          type: string
+          format: uuid
+        chief_complaint:
+          type: string
+          default: ''
+      required:
+      - slot_id
+    ConsultationCompleteRequest:
+      type: object
+      properties:
+        clinical_notes:
+          type: string
+          default: ''
+    ConsultationStartRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+          default: ''
+    CustomTokenObtainPairRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    DoctorProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        doctor_name:
+          type: string
+          readOnly: true
+        credentials:
+          type: string
+          description: e.g. BAMS, MD (Ayurveda)
+          maxLength: 255
+        specialization:
+          type: string
+          maxLength: 150
+        biography:
+          type: string
+        years_of_experience:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        consultation_fee:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        verification_status:
+          allOf:
+          - $ref: '#/components/schemas/VerificationStatusEnum'
+          readOnly: true
+        active_status:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - credentials
+      - doctor_name
+      - id
+      - specialization
+      - user
+      - verification_status
+    DoctorProfileUpdate:
+      type: object
+      properties:
+        credentials:
+          type: string
+          description: e.g. BAMS, MD (Ayurveda)
+          maxLength: 255
+        specialization:
+          type: string
+          maxLength: 150
+        biography:
+          type: string
+        years_of_experience:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        consultation_fee:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        active_status:
+          type: boolean
+      required:
+      - credentials
+      - specialization
+    DoctorProfileUpdateRequest:
+      type: object
+      properties:
+        credentials:
+          type: string
+          minLength: 1
+          description: e.g. BAMS, MD (Ayurveda)
+          maxLength: 255
+        specialization:
+          type: string
+          minLength: 1
+          maxLength: 150
+        biography:
+          type: string
+        years_of_experience:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        consultation_fee:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        active_status:
+          type: boolean
+      required:
+      - credentials
+      - specialization
+    GenderEnum:
+      enum:
+      - MALE
+      - FEMALE
+      - OTHER
+      - PREFER_NOT_TO_SAY
+      type: string
+      description: |-
+        * `MALE` - Male
+        * `FEMALE` - Female
+        * `OTHER` - Other
+        * `PREFER_NOT_TO_SAY` - Prefer not to say
+    MedicationItemRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        dosage:
+          type: string
+          minLength: 1
+          maxLength: 100
+        duration:
+          type: string
+          minLength: 1
+          maxLength: 100
+        instructions:
+          type: string
+          default: ''
+          maxLength: 500
+      required:
+      - dosage
+      - duration
+      - name
+    OutcomeEnum:
+      enum:
+      - SUCCESS
+      - FAILURE
+      - DENIED
+      type: string
+      description: |-
+        * `SUCCESS` - Success
+        * `FAILURE` - Failure
+        * `DENIED` - Denied
+    PaginatedAuditLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    PaginatedDoctorProfileList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorProfile'
+    PatchedDoctorProfileUpdateRequest:
+      type: object
+      properties:
+        credentials:
+          type: string
+          minLength: 1
+          description: e.g. BAMS, MD (Ayurveda)
+          maxLength: 255
+        specialization:
+          type: string
+          minLength: 1
+          maxLength: 150
+        biography:
+          type: string
+        years_of_experience:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        consultation_fee:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        active_status:
+          type: boolean
+    PatchedUserProfileUpdateRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+        patient_profile:
+          $ref: '#/components/schemas/PatientProfileRequest'
+    PatientProfile:
+      type: object
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+        gender:
+          $ref: '#/components/schemas/GenderEnum'
+        blood_group:
+          type: string
+          nullable: true
+          maxLength: 10
+        emergency_contact_name:
+          type: string
+          nullable: true
+          maxLength: 100
+        emergency_contact_phone:
+          type: string
+          nullable: true
+          maxLength: 20
+        medical_history_summary:
+          type: string
+          nullable: true
+          description: Synthetic patient history
+    PatientProfileRequest:
+      type: object
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+        gender:
+          $ref: '#/components/schemas/GenderEnum'
+        blood_group:
+          type: string
+          nullable: true
+          maxLength: 10
+        emergency_contact_name:
+          type: string
+          nullable: true
+          maxLength: 100
+        emergency_contact_phone:
+          type: string
+          nullable: true
+          maxLength: 20
+        medical_history_summary:
+          type: string
+          nullable: true
+          description: Synthetic patient history
+    PaymentInitiateRequest:
+      type: object
+      properties:
+        consultation_id:
+          type: string
+          format: uuid
+        simulate_failure:
+          type: boolean
+          default: false
+      required:
+      - consultation_id
+    PrescriptionCreateRequest:
+      type: object
+      properties:
+        diagnosis:
+          type: string
+          minLength: 1
+          description: Clinical Ayurvedic / Allopathic diagnosis
+        medications:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicationItemRequest'
+        lifestyle_recommendations:
+          type: string
+          description: Pathya / Apathya (Dietary and Lifestyle)
+        follow_up_date:
+          type: string
+          format: date
+          nullable: true
+        additional_notes:
+          type: string
+      required:
+      - diagnosis
+      - medications
+    RoleEnum:
+      enum:
+      - PATIENT
+      - DOCTOR
+      - ADMIN
+      type: string
+      description: |-
+        * `PATIENT` - Patient
+        * `DOCTOR` - Doctor
+        * `ADMIN` - Administrator
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        full_name:
+          type: string
+          readOnly: true
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        account_status:
+          allOf:
+          - $ref: '#/components/schemas/AccountStatusEnum'
+          readOnly: true
+        email_verified_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        patient_profile:
+          allOf:
+          - $ref: '#/components/schemas/PatientProfile'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - account_status
+      - created_at
+      - email
+      - email_verified_at
+      - first_name
+      - full_name
+      - id
+      - last_name
+      - patient_profile
+      - role
+    UserProfileUpdate:
+      type: object
+      properties:
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+        patient_profile:
+          $ref: '#/components/schemas/PatientProfile'
+      required:
+      - first_name
+      - last_name
+    UserProfileUpdateRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+        patient_profile:
+          $ref: '#/components/schemas/PatientProfileRequest'
+      required:
+      - first_name
+      - last_name
+    UserRegister:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+      required:
+      - email
+      - first_name
+      - id
+      - last_name
+    UserRegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password_confirm:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - first_name
+      - last_name
+      - password
+      - password_confirm
+    VerificationStatusEnum:
+      enum:
+      - PENDING
+      - VERIFIED
+      - REJECTED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `VERIFIED` - Verified
+        * `REJECTED` - Rejected
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

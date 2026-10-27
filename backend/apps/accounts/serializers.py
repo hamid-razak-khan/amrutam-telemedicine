@@ -1,0 +1,95 @@
+from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from apps.accounts.models import User, PatientProfile
+from apps.doctors.models import DoctorProfile
+
+class PatientProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientProfile
+        fields = [
+            'date_of_birth', 'gender', 'blood_group',
+            'emergency_contact_name', 'emergency_contact_phone',
+            'medical_history_summary'
+        ]
+
+class UserSerializer(serializers.ModelSerializer):
+    patient_profile = PatientProfileSerializer(read_only=True)
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'full_name',
+            'phone_number', 'role', 'account_status', 'email_verified_at',
+            'patient_profile', 'created_at'
+        ]
+        read_only_fields = ['id', 'email', 'role', 'account_status', 'email_verified_at', 'created_at']
+
+class UserRegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password_confirm = serializers.CharField(write_only=True, required=True)
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'password', 'password_confirm']
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError({"password_confirm": "Password fields did not match."})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('password_confirm')
+        password = validated_data.pop('password')
+        
+        # Enforce PATIENT role for all public self-registrations
+        user = User.objects.create_user(
+            role=User.ROLE_PATIENT,
+            **validated_data
+        )
+        user.set_password(password)
+        user.save()
+        
+        # Initialize empty PatientProfile
+        PatientProfile.objects.create(user=user)
+        return user
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    patient_profile = PatientProfileSerializer(required=False)
+
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'phone_number', 'patient_profile']
+
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop('patient_profile', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if profile_data and hasattr(instance, 'patient_profile'):
+            profile = instance.patient_profile
+            for attr, value in profile_data.items():
+                setattr(profile, attr, value)
+            profile.save()
+
+        return instance
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token['email'] = user.email
+        token['role'] = user.role
+        token['full_name'] = user.full_name
+        return token
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        if not self.user.is_active or self.user.account_status != User.STATUS_ACTIVE:
+            raise serializers.ValidationError({"detail": "User account is suspended or inactive."})
+        
+        # Include user details and role in response
+        data['user'] = UserSerializer(self.user).data
+        return data
