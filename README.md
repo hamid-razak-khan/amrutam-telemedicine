@@ -469,17 +469,6 @@ For a granular, 50-item audit against every requirement in the assignment specif
 
 ---
 
-## 31. Instructions for Recording and Presenting the 5-Minute Demo
-Please refer to [`docs/demo-script.md`](docs/demo-script.md) for the exact, timed five-minute evaluation walkthrough:
-1. **0:00 – 0:45**: Architecture, health probes (`/health/live`), and interactive OpenAPI documentation (`/api/docs/`).
-2. **0:45 – 1:30**: Patient authentication, TOTP MFA challenge, and doctor search directory.
-3. **1:30 – 2:30**: Concurrency protection demonstration: two patients booking the same slot &rarr; 1 succeeds (201), the other is rejected (409 Conflict).
-4. **2:30 – 3:30**: 10-Minute hold reservation, guarded Pay Now button, simulated checkout, and slot state transition to BOOKED.
-5. **3:30 – 4:15**: Doctor workspace, consultation state transitions (`IN_PROGRESS` &rarr; `COMPLETED`), and structured Ayurvedic prescription issuance.
-6. **4:15 – 5:00**: Admin Dashboard: single-query Recharts telemetry, doctor approvals, and the "Removed Doctors" tab displaying joining and removal dates.
-
----
-
 ### Authors & Submission Information
 * **Project**: Amrutam Telemedicine Platform
 * **Candidate**: Full-Stack / Backend Engineering Candidate
