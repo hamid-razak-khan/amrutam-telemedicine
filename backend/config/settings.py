@@ -110,14 +110,17 @@ if db_engine_override == 'sqlite' and not (db_host and db_engine_override in ('p
         }
     }
 elif database_url:
+    # ssl_require is intentionally False here — SSL mode is controlled via the
+    # sslmode= query parameter in DATABASE_URL (e.g. ?sslmode=require for Supabase,
+    # ?sslmode=disable for local CI postgres containers).
+    _ssl_require = 'sslmode=disable' not in database_url and 'sslmode=allow' not in database_url
     DATABASES = {
         'default': dj_database_url.parse(
             database_url,
             conn_max_age=int(os.getenv('DB_CONN_MAX_AGE', '600')),
-            ssl_require=True
+            ssl_require=_ssl_require
         )
     }
-    DATABASES['default'].setdefault('OPTIONS', {})['sslmode'] = os.getenv('DB_SSLMODE', 'require')
 else:
     # Direct vs Supabase Session Pooler connection resolution
     # Direct Supabase endpoints (db.<ref>.supabase.co:5432) resolve to IPv6 only.
