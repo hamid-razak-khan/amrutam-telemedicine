@@ -1,300 +1,307 @@
-# Amrutam Telemedicine Platform: System Architecture & Engineering Blueprint
+# Amrutam Telemedicine Platform
 
-## Executive Overview
-The **Amrutam Telemedicine Platform** is an enterprise-grade, transaction-safe clinical healthcare system engineered to deliver authentic Ayurvedic consultations at scale. Engineered to support **100,000 daily consultations**, the platform features a decoupled modular monolith backend in Python/Django REST Framework, PostgreSQL with pessimistic concurrency control, Redis & Celery for asynchronous background jobs, structured JSON logging, and a responsive React (JavaScript, Vite, Tailwind CSS) frontend.
+## System Architecture
 
----
+## 1. Overview
 
-## 1. High-Level Architecture & System Data Flow
+Amrutam Telemedicine is a web application that connects patients with Ayurvedic doctors. Patients can search for doctors, book appointments, make simulated payments, and view prescriptions. Doctors can manage appointments and issue prescriptions, while administrators manage doctor approvals and monitor platform activity.
+
+The application follows a **three-layer architecture**:
+
+1. **Presentation Layer:** React frontend for patients, doctors, and administrators.
+2. **Business Logic Layer:** Django REST Framework APIs that handle authentication, booking, payments, consultations, and permissions.
+3. **Data Access Layer:** Django ORM and PostgreSQL for storing and retrieving application data.
+
+The backend is organized as a modular monolith, with different Django applications responsible for specific business functions.
+
+## 2. Technology Stack
+
+| Component         | Technology                            | Purpose                                        |
+| ----------------- | ------------------------------------- | ---------------------------------------------- |
+| Frontend          | React, JavaScript, Vite, Tailwind CSS | User interface                                 |
+| Backend           | Python, Django, Django REST Framework | APIs and business logic                        |
+| Database          | PostgreSQL, Supabase                  | Persistent application data                    |
+| Authentication    | JWT and TOTP MFA                      | Secure user authentication                     |
+| Background Tasks  | Celery and Redis                      | Asynchronous task processing, where configured |
+| API Documentation | OpenAPI and Swagger UI                | API documentation                              |
+| Testing           | Pytest and Vitest                     | Backend and frontend testing                   |
+| Containerization  | Docker and Docker Compose             | Consistent application execution               |
+| CI                | GitHub Actions                        | Automated checks                               |
+
+## 3. High-Level Architecture
 
 ```mermaid
-graph TD
-    Client[React Frontend / Web Browser] -->|HTTPS / REST API / JSON| NginxLoadBalancer[Reverse Proxy / TLS Termination]
-    NginxLoadBalancer -->|/api/v1/*| DjangoApp[Django REST Framework Monolith]
-    NginxLoadBalancer -->|/metrics| Prometheus[Prometheus Scraper]
-    
-    subgraph Backend Core
-        DjangoApp -->|Pessimistic Locking / Transactions| PostgreSQL[(PostgreSQL 16 DB - Supabase)]
-        DjangoApp -->|Task Enqueue / Token Blacklist| Redis[(Redis 7 In-Memory Broker & Cache)]
-        CeleryWorker[Celery Worker Cluster] -->|Task Execution / Retry Backoff| Redis
-        CeleryWorker -->|State Updates| PostgreSQL
-    end
+flowchart TD
+    User[Patient / Doctor / Admin]
+    Frontend[React Frontend]
+    API[Django REST Framework API]
+    Services[Business Logic Services]
+    ORM[Django ORM]
+    DB[(PostgreSQL - Supabase)]
+    Redis[Redis]
+    Worker[Celery Workers]
+    Audit[Audit Logging]
+    Metrics[Metrics and Application Logs]
 
-    subgraph Observability & Storage
-        Prometheus --> Grafana[Grafana Dashboard]
-        DjangoApp -->|Structured JSON Logs| LogAggregator[Log Ingestion / CloudWatch]
-    end
+    User --> Frontend
+    Frontend -->|REST API / JSON| API
+    API --> Services
+    Services --> ORM
+    ORM --> DB
+    Services --> Audit
+    API --> Metrics
+    Services --> Redis
+    Redis --> Worker
+    Worker --> DB
 ```
 
-### Data Flow Lifecycle
-1. **Client Interaction**: The patient or doctor interacts with the responsive React single-page application.
-2. **Gateway & Routing**: Requests pass through reverse proxy/TLS termination to the Django REST Framework application.
-3. **Authentication & Authorization**: Requests are authenticated via JWT access tokens. Role-based permissions (`IsPatient`, `IsDoctor`, `IsAdminUserRole`) and TOTP MFA are enforced.
-4. **Business Logic & Service Layer**: Views delegate to modular domain services (`BookingService`, `DoctorService`, `PaymentService`).
-5. **Persistence & Locking**: Transactions execute inside `transaction.atomic()` blocks, acquiring exclusive row locks (`select_for_update`) on slot records.
-6. **Background Tasks**: Heavy or scheduled jobs (e.g. releasing expired 10-minute slot holds) are processed by Celery workers via Redis.
-7. **Audit & Observability**: Every mutating action writes an append-only `AuditLog` entry; Prometheus scrapes runtime metrics from `/metrics`.
+**Note:** This diagram represents the intended application architecture. Redis, Celery, metrics, and other infrastructure components should be considered operational only where their configuration and execution have been verified.
 
----
+### Request Flow
 
-## 2. Component Responsibilities & Domain Separation
+1. A user interacts with the React frontend.
+2. The frontend sends an API request to Django REST Framework.
+3. The backend authenticates the request and checks the user's permissions.
+4. Business logic validates the requested operation.
+5. Django ORM reads or updates the PostgreSQL database.
+6. The backend returns the response to the frontend.
+7. Relevant operations are recorded in audit logs.
 
-| Domain Component | Primary Technology | Responsibility |
-| :--- | :--- | :--- |
-| **Frontend Application** | React 18, Vite, Tailwind CSS, Lucide, Recharts | Interactive doctor discovery, real-time availability slot selection, doctor consultation workspace, admin Recharts analytics. |
-| **API Gateway / Core** | Django 5.0, DRF, Whitenoise, Gunicorn | Request routing, JWT verification, RBAC permissions, Request-ID tracing, and structured JSON error formatting. |
-| **Concurrency & Idempotency** | Django ORM, PostgreSQL `select_for_update` | Atomically locks slot rows, calculates SHA-256 request payload fingerprints, and guarantees single-claim semantics. |
-| **Persistence Layer** | PostgreSQL 16 (hosted on Supabase) | ACID relational storage, check constraints, foreign key cascades, partial unique indexes, and append-only audit trail immutability. |
-| **Async Worker Queue** | Celery 5.4 + Redis 7 | Expired reservation cleanup, background notification dispatch, and telemetry aggregation. |
+## 4. Main Components
 
----
+### Frontend
 
-## 3. Entity-Relationship (ER) Diagram
+The React frontend provides separate interfaces for patients, doctors, and administrators.
+
+Its main responsibilities include:
+
+* User registration and login.
+* Doctor search and availability display.
+* Appointment booking and cancellation.
+* Payment interaction.
+* Consultation and prescription views.
+* Administrative dashboards and analytics.
+
+### Backend
+
+The Django REST Framework backend manages application functionality.
+
+Its main modules include:
+
+| Module        | Responsibility                                        |
+| ------------- | ----------------------------------------------------- |
+| Accounts      | Users, authentication, JWT, and MFA                   |
+| Doctors       | Doctor profiles, approval, and verification           |
+| Availability  | Doctor availability and appointment slots             |
+| Bookings      | Appointment creation, cancellation, and booking rules |
+| Consultations | Consultation status and clinical workflow             |
+| Prescriptions | Digital prescriptions and instructions                |
+| Payments      | Payment status and simulated payment processing       |
+| Audit         | Recording important application events                |
+| Analytics     | Administrative reports and statistics                 |
+
+### Database
+
+PostgreSQL stores user accounts, doctor profiles, availability slots, consultations, prescriptions, payments, and audit records.
+
+Django ORM provides database access, while database transactions and appropriate constraints help maintain data integrity.
+
+## 5. Database Relationships
+
+The main entities and their relationships are illustrated below.
 
 ```mermaid
 erDiagram
-    User ||--o{ PatientProfile : "has (1:1)"
-    User ||--o{ DoctorProfile : "has (1:1)"
-    User ||--o{ UserMFA : "configures (1:1)"
-    User ||--o{ Consultation : "books as patient"
-    DoctorProfile ||--o{ AvailabilitySlot : "schedules"
-    DoctorProfile ||--o{ Consultation : "conducts as doctor"
-    AvailabilitySlot ||--o{ Consultation : "booked for (1:N history)"
-    Consultation ||--o| Booking : "associated with"
-    Consultation ||--o| Prescription : "issues"
-    Consultation ||--o{ Payment : "billed for"
-    User ||--o{ IdempotencyKey : "owns"
-    User ||--o{ AuditLog : "initiates actor events"
-
-    User {
-        UUID id PK
-        string email UK
-        string password_hash
-        string role "PATIENT | DOCTOR | ADMIN"
-        string account_status "ACTIVE | SUSPENDED"
-        boolean is_active
-        datetime created_at
-    }
-
-    UserMFA {
-        UUID id PK
-        UUID user_id FK
-        string secret_key
-        boolean is_enabled
-        datetime confirmed_at
-    }
-
-    DoctorProfile {
-        UUID id PK
-        UUID user_id FK
-        string license_number UK
-        string credentials
-        string specialization
-        decimal consultation_fee
-        string verification_status "PENDING | APPROVED | REJECTED | REMOVED"
-        boolean active_status
-        datetime approved_at
-        datetime removed_at
-        string removal_reason
-    }
-
-    AvailabilitySlot {
-        UUID id PK
-        UUID doctor_id FK
-        datetime start_at
-        datetime end_at
-        string status "AVAILABLE | RESERVED | BOOKED | CANCELLED"
-    }
-
-    Consultation {
-        UUID id PK
-        string booking_reference UK
-        UUID patient_id FK
-        UUID doctor_id FK
-        UUID slot_id FK
-        datetime scheduled_start
-        datetime scheduled_end
-        datetime expires_at
-        string status "BOOKED | CONFIRMED | IN_PROGRESS | COMPLETED | CANCELLED"
-        text chief_complaint
-        text clinical_notes
-    }
-
-    Prescription {
-        UUID id PK
-        UUID consultation_id FK
-        UUID doctor_id FK
-        UUID patient_id FK
-        text diagnosis
-        json medications "Array of {name, dosage, duration, instructions}"
-        text lifestyle_recommendations "Pathya guidelines"
-        date follow_up_date
-    }
-
-    Payment {
-        UUID id PK
-        UUID consultation_id FK
-        UUID patient_id FK
-        decimal amount
-        string status "PENDING | COMPLETED | FAILED | REFUNDED"
-        string provider_reference UK
-        string idempotency_key UK
-    }
-
-    AuditLog {
-        UUID id PK
-        UUID actor_id FK
-        string action
-        string resource_type
-        string resource_id
-        string outcome "SUCCESS | FAILURE | DENIED"
-        json sanitized_metadata
-        datetime timestamp
-    }
+    USER ||--o| PATIENT_PROFILE : has
+    USER ||--o| DOCTOR_PROFILE : has
+    USER ||--o| USER_MFA : configures
+    DOCTOR_PROFILE ||--o{ AVAILABILITY_SLOT : creates
+    USER ||--o{ CONSULTATION : books
+    DOCTOR_PROFILE ||--o{ CONSULTATION : conducts
+    AVAILABILITY_SLOT ||--o{ CONSULTATION : schedules
+    CONSULTATION ||--o{ PAYMENT : has
+    CONSULTATION ||--o| PRESCRIPTION : may_have
+    USER ||--o{ AUDIT_LOG : generates
 ```
 
----
+The diagram shows the main logical relationships. The actual database schema and relationship cardinalities should be verified against the current Django models.
 
-## 4. API Design & Interface Contracts
+### Important Data
 
-The API follows strict RESTful conventions under the versioned prefix `/api/v1/`:
+* **User:** Email, password hash, role, and account status.
+* **Doctor Profile:** Specialization, consultation fee, and approval status.
+* **Availability Slot:** Doctor, start time, end time, and availability status.
+* **Consultation:** Patient, doctor, appointment slot, status, and clinical information.
+* **Payment:** Consultation, amount, and payment status.
+* **Prescription:** Diagnosis, medication details, dosage, and instructions.
+* **Audit Log:** Actor, action, affected resource, timestamp, and sanitized metadata.
 
-* **Standard Envelope**: Successful write operations return `{ "success": true, "message": "...", "data": { ... } }`.
-* **Standard Error Representation**: Errors return RFC 7807-compliant payloads:
-  ```json
-  {
-    "success": false,
-    "error": {
-      "code": "SLOT_UNAVAILABLE",
-      "message": "Sorry, this time slot has just been booked. Please select another available time."
-    }
-  }
-  ```
-* **HTTP Status Code Mapping**:
-  * `200 OK`: Successful read or idempotent cached completion.
-  * `201 Created`: Resource successfully created (booking, availability slot, user).
-  * `400 Bad Request`: Payload validation error or invalid business transition.
-  * `401 Unauthorized`: Missing, expired, or invalid JWT token.
-  * `403 Forbidden`: Permission denied (cross-tenant access or role violation).
-  * `404 Not Found`: Target entity does not exist.
-  * `409 Conflict`: Slot concurrency collision or double-booking attempt.
-  * `422 Unprocessable Entity`: Idempotency key mismatch (same key with different payload).
-* **OpenAPI Documentation**: Automatically generated via `drf-spectacular` at `/api/schema/` and rendered interactively via Swagger UI at `/api/docs/`.
+## 6. API Design
 
----
+The application exposes REST APIs through Django REST Framework.
 
-## 5. Transaction & Concurrency Strategy
+The configured API base path is:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor PatientA as Patient A
-    actor PatientB as Patient B
-    participant API as Django REST API
-    participant Lock as PostgreSQL (select_for_update)
-    participant DB as Supabase PostgreSQL
+`/api/v1/`
 
-    Note over PatientA,PatientB: Both click "Book 10:30 PM Slot" at the same millisecond
-    PatientA->>API: POST /api/v1/bookings {slot_id: S1} [Idempotency-Key: K1]
-    PatientB->>API: POST /api/v1/bookings {slot_id: S1} [Idempotency-Key: K2]
-    
-    rect rgb(240, 255, 240)
-        Note over API,DB: Transaction A starts (Thread 1)
-        API->>Lock: BEGIN; SELECT * FROM AvailabilitySlot WHERE id=S1 FOR UPDATE;
-        Lock-->>API: Row Locked (Acquired by Transaction A)
-    end
+The OpenAPI schema and Swagger documentation are available at the following paths when the backend is running:
 
-    rect rgb(255, 240, 240)
-        Note over API,DB: Transaction B waits for row lock (Thread 2)
-        API->>Lock: BEGIN; SELECT * FROM AvailabilitySlot WHERE id=S1 FOR UPDATE;
-    end
+* **Swagger UI:** `/api/docs/`
+* **OpenAPI schema:** `/api/schema/`
 
-    API->>DB: Check slot status == 'AVAILABLE' -> TRUE
-    API->>DB: UPDATE AvailabilitySlot SET status='RESERVED'
-    API->>DB: INSERT INTO Consultation (status='BOOKED', expires_at=NOW+10min)
-    API->>DB: INSERT INTO Payment (status='PENDING')
-    API->>DB: COMMIT; (Transaction A releases lock)
-    API-->>PatientA: 201 Created (10-Minute Reservation Confirmed)
+Important API operations include:
 
-    rect rgb(255, 240, 240)
-        Lock-->>API: Row Lock Granted to Transaction B
-        API->>DB: Re-read slot status -> 'RESERVED' != 'AVAILABLE'
-        API->>DB: ROLLBACK;
-        API-->>PatientB: 409 Conflict ("Sorry, this time slot has just been booked...")
-    end
+| Operation         | Purpose                            |
+| ----------------- | ---------------------------------- |
+| Authentication    | Register and authenticate users    |
+| Doctor management | Search doctors and manage approval |
+| Availability      | View and manage appointment slots  |
+| Booking           | Create and cancel appointments     |
+| Consultation      | Manage consultation status         |
+| Prescription      | Create and retrieve prescriptions  |
+| Payment           | Process simulated payments         |
+| Analytics         | Display administrative statistics  |
+
+Refer to the actual API routes and Swagger documentation for the complete endpoint list.
+
+## 7. Appointment Booking and Concurrency
+
+Preventing double-booking is an important requirement of the application.
+
+The booking workflow is:
+
+1. The patient selects an available doctor and time slot.
+2. The frontend submits a booking request.
+3. The backend validates the patient, doctor, slot, and booking rules.
+4. A database transaction protects the booking operation.
+5. The backend checks whether the slot is still available.
+6. The appointment and associated payment record are created according to the booking workflow.
+7. The frontend displays the booking result.
+
+### Preventing Double-Booking
+
+The backend can use Django's `transaction.atomic()` and PostgreSQL row-level locking through `select_for_update()` to coordinate competing booking requests.
+
+Appropriate database constraints provide additional protection against duplicate active bookings.
+
+If two patients attempt to reserve the same slot, only one booking should succeed. The other request should receive an appropriate conflict response.
+
+Idempotency keys can also prevent duplicate bookings when a client retries the same request.
+
+**Important:** The exact concurrency guarantees depend on the actual database configuration, constraints, and transaction implementation. They should be verified using concurrent requests against PostgreSQL.
+
+## 8. Authentication and Security
+
+The application includes security mechanisms intended to protect user accounts and clinical information.
+
+These include:
+
+* JWT-based authentication.
+* TOTP multi-factor authentication.
+* Role-based access control for patients, doctors, and administrators.
+* Doctor approval before access to doctor functionality.
+* Validation of incoming API requests.
+* Restrictions on access to other users' appointments and prescriptions.
+* Audit logging for important operations.
+* Sensitive-data redaction in logs.
+* Environment variables for application secrets.
+
+Passwords and secrets must not be stored in source code or committed to the repository.
+
+Additional production security controls should be assessed before the application handles real patient information.
+
+See `security-checklist.md` and `threat-model.md` for further details.
+
+## 9. Background Processing and Observability
+
+Background processing can be used for tasks such as expired reservation cleanup and appointment reminders.
+
+Where configured, Celery processes background jobs and Redis provides the task broker.
+
+Application logging and metrics help developers investigate errors and monitor system behavior.
+
+Production observability should include appropriate logging, metrics, health checks, and distributed tracing where required. A request ID in application logs is useful for correlation but does not, by itself, constitute full distributed tracing.
+
+The actual availability of these capabilities depends on the current infrastructure configuration.
+
+## 10. Scalability and Performance
+
+The application is designed with modularity and database consistency in mind.
+
+Potential scalability improvements include:
+
+* Database indexes for frequently queried fields.
+* Pagination for large API responses.
+* Query optimization to reduce unnecessary database requests.
+* Caching suitable read-heavy data.
+* Background processing for non-critical tasks.
+* Database connection pooling.
+* Horizontal scaling of stateless application instances.
+* Partitioning large tables when justified by measured workload.
+
+The assignment specifies the following performance goals:
+
+| Metric              | Target           |
+| ------------------- | ---------------- |
+| Daily consultations | 100,000          |
+| Read latency        | p95 below 200 ms |
+| Write latency       | p95 below 500 ms |
+| Availability        | 99.95%           |
+
+These are **target requirements, not verified production results**. Load testing, monitoring, and appropriate deployment infrastructure are necessary to demonstrate that the targets can be achieved.
+
+## 11. Backup and Disaster Recovery
+
+The production deployment should include:
+
+* Automated database backups.
+* Secure storage of backup copies.
+* A documented restoration procedure.
+* Periodic restoration testing.
+* Monitoring of backup failures.
+* A recovery plan for application and database outages.
+
+The recovery point objective (RPO) and recovery time objective (RTO) should be defined according to the assignment requirements and verified through recovery testing.
+
+Do not assume that a backup or recovery target is operational merely because it is documented.
+
+## 12. Deployment
+
+The project includes Docker-related configuration intended to support containerized execution.
+
+The application can be started using Docker Compose when the required configuration and environment variables are available:
+
+```bash
+docker compose up --build
 ```
 
-### Concurrency Mechanisms
-1. **Pessimistic Row-Level Locking (`select_for_update`)**: Acquires an exclusive lock on the specific `AvailabilitySlot` row inside a `transaction.atomic()` block. Competing requests block until the first transaction commits or rolls back.
-2. **Partial Unique PostgreSQL Constraints**:
-   * `unique_active_consultation_per_slot`: Enforces unique `slot` WHERE `status IN ('BOOKED', 'CONFIRMED', 'IN_PROGRESS')`.
-   * `unique_active_doctor_appointment_time`: Enforces unique `(doctor, scheduled_start)` WHERE `status IN ('BOOKED', 'CONFIRMED', 'IN_PROGRESS')`.
-   * Cancelled and completed appointments are excluded from the index, allowing released slots to be safely re-booked while preserving complete clinical history.
-3. **10-Minute Hold Reservation Window**: Upon booking, `expires_at = now + timedelta(minutes=10)`. If payment is not completed within 10 minutes, the slot is dynamically treated as available and released for other patients without database record deletion.
+The exact services started depend on the current `docker-compose.yml` configuration.
+
+The production deployment should use:
+
+* Appropriate production Django settings.
+* Secure environment variable management.
+* HTTPS.
+* Correct allowed-host and CORS configuration.
+* Secure database connectivity.
+* A configured CI pipeline.
+* Health checks and application monitoring.
+
+Public cloud deployment is separate from running the application locally through Docker.
+
+## 13. References
+
+For more information, refer to:
+
+* `../README.md` — Project overview and setup instructions.
+* `assignment-compliance.md` — Assignment requirement status.
+* `security-checklist.md` — Security controls and remaining work.
+* `threat-model.md` — Security threats and mitigations.
+* `verification-report.md` — Test results and verification status.
+* `demo-script.md` — Five-minute project demonstration.
 
 ---
 
-## 6. Retry and Backoff Strategies
-
-1. **Frontend HTTP Client (Axios)**:
-   * Automatic 401 token refresh queue in [`frontend/src/api/axios.js`](../frontend/src/api/axios.js#L44). When an access token expires, outgoing requests pause in a FIFO queue while a single refresh request runs. Once the token is rotated, all queued requests replay with the fresh token.
-   * If refresh fails (session revoked), the queue rejects, clearing session storage and redirecting to login.
-2. **Asynchronous Task Retries (Celery)**:
-   * Background tasks (e.g. reservation release, notification dispatch) configure automatic retry with exponential backoff:
-     ```python
-     @shared_task(bind=True, max_retries=5, default_retry_delay=60, retry_backoff=True, retry_backoff_max=600)
-     def release_expired_reservations_task(self):
-         ...
-     ```
-   * Exponential backoff formula: $T_{retry} = \text{delay} \times 2^{\text{attempt}}$, bounded at 10 minutes, preventing thundering herds against the database.
-3. **Database Connection Resilience**:
-   * Django configured with `CONN_MAX_AGE = 600` and Supabase connection pooler support (`aws-0-ap-northeast-2.pooler.supabase.com`), handling transient network resets gracefully.
-
----
-
-## 7. Caching and Data Partitioning Decisions
-
-### Caching Strategy
-* **Session & Task Broker**: Redis 7 stores Celery job queues and SimpleJWT token blacklist.
-* **Read-Heavy Public Directory**: Doctor profile cards and specialties are read ~20x more frequently than bookings. Future production configuration caches `GET /api/v1/doctors` responses in Redis with a 15-minute TTL, invalidated when doctors update their profile.
-* **Why Slots Are NOT Cached in Redis**: To maintain strict ACID consistency and avoid stale slot reads, slot availability is queried directly from PostgreSQL with pessimistic row locks. Caching active availability in Redis risks distributed cache invalidation race conditions.
-
-### Data Partitioning Strategy
-* **Growth Profile**: At 100,000 consultations per day, `Consultation`, `Payment`, and `AuditLog` accumulate ~36.5 million rows annually (~55 GB/year).
-* **Partitioning Implementation**:
-  * Range partitioning by `scheduled_start` month on `Consultation`:
-    ```sql
-    CREATE TABLE consultations_y2026m10 PARTITION OF consultations
-        FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');
-    ```
-  * Range partitioning by `timestamp` month on `AuditLog`.
-  * Benefits: High-velocity partition pruning on date-filtered queries and instant archival of historical partitions via tablespace detachment.
-
----
-
-## 8. Backup and Disaster Recovery Strategy
-
-| Objective | Target | Implementation Mechanism |
-| :--- | :--- | :--- |
-| **Recovery Point Objective (RPO)** | **< 15 minutes** | Continuous PostgreSQL Write-Ahead Log (WAL) archiving to encrypted cloud object storage (Amazon S3 / Supabase storage). |
-| **Recovery Time Objective (RTO)** | **< 1 hour** | Automated container redeployment via Docker Compose or Kubernetes manifests, connecting to restored snapshot. |
-| **Automated Daily Backups** | **24-hour cycle** | Full automated daily database snapshot retained for 30 days with multi-region replication. |
-| **Point-In-Time Recovery (PITR)** | **Up to 7 days** | WAL replay enables restoring the database to any exact second within the retention window. |
-| **Data Integrity Verification** | **Weekly** | Automated backup restoration test into an isolated staging database verifying table row counts and checksums. |
-
----
-
-## 9. Scalability Assumptions & Quantitative Model (100,000 Daily Consultations)
-
-### Workload Sizing Breakdown
-* **Daily Consultations**: 100,000 appointments per 24 hours.
-* **Average Booking Rate**: $\frac{100,000}{86,400} \approx 1.16$ bookings/second.
-* **Peak Booking Rate (10:00–14:00 window)**: $4\times$ average $\approx 10\text{--}15$ write requests/second.
-* **Read-to-Write Ratio**: Estimated at $15:1$ (browsing doctors, checking slots, reviewing prescriptions).
-* **Peak Read Throughput**: $15 \times 15 = 225$ read queries/second.
-
-### Infrastructure Sizing Requirements
-1. **Application Tier**: 3 stateless Gunicorn/Django container instances (2 vCPU, 4 GB RAM each) behind an application load balancer, comfortably handling 300+ requests/second.
-2. **Database Tier**: Managed PostgreSQL 16 (4 vCPU, 16 GB RAM, 2,000 IOPS SSD) with PgBouncer connection pooling set to 100 client connections.
-3. **Read Replicas**: Deploy 2 PostgreSQL Read Replicas for `GET /api/v1/doctors` and admin analytics queries, keeping the primary writer isolated for booking transactions.
-4. **Network Bandwidth**: ~25 KB average response payload $\times$ 250 req/s $\approx$ 6.25 MB/s network throughput at peak.
+**Project:** Amrutam Telemedicine Platform
+**Purpose:** Backend Developer Assignment
+**Organization:** Amrutam Pharmaceuticals Pvt. Ltd.
