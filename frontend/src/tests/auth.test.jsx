@@ -18,7 +18,7 @@ describe('Frontend Authentication Tests', () => {
 
     expect(screen.getByPlaceholderText(/name@example.com/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/••••••••/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Sign In to Platform/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continue to Sign In/i })).toBeInTheDocument();
   });
 
   it('validates password mismatch during patient registration', async () => {
@@ -28,11 +28,11 @@ describe('Frontend Authentication Tests', () => {
       </BrowserRouter>
     );
 
-    const firstNameInput = screen.getByPlaceholderText(/Aarav/i);
-    const lastNameInput = screen.getByPlaceholderText(/Verma/i);
+    const firstNameInput = screen.getByPlaceholderText(/Ananya/i);
+    const lastNameInput = screen.getByPlaceholderText(/Iyer/i);
     const emailInput = screen.getByPlaceholderText(/name@example.com/i);
     const passInputs = screen.getAllByPlaceholderText(/••••••••/i);
-    const submitBtn = screen.getByRole('button', { name: /Complete Registration/i });
+    const submitBtn = screen.getByRole('button', { name: /Complete Patient Registration/i });
 
     fireEvent.change(firstNameInput, { target: { value: 'Aarav' } });
     fireEvent.change(lastNameInput, { target: { value: 'Kumar' } });

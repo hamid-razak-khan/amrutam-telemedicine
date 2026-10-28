@@ -33,10 +33,11 @@ class Consultation(models.Model):
     booking_reference = models.CharField(max_length=64, unique=True, db_index=True)
     patient = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='consultations_as_patient')
     doctor = models.ForeignKey('doctors.DoctorProfile', on_delete=models.CASCADE, related_name='consultations')
-    slot = models.OneToOneField('availability.AvailabilitySlot', on_delete=models.PROTECT, related_name='consultation')
+    slot = models.ForeignKey('availability.AvailabilitySlot', on_delete=models.PROTECT, related_name='consultations')
     scheduled_start = models.DateTimeField(db_index=True)
     scheduled_end = models.DateTimeField(db_index=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_BOOKED, db_index=True)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True, help_text="Reservation expiration timestamp")
     
     chief_complaint = models.TextField(blank=True, default='', help_text="Patient reported issues")
     clinical_notes = models.TextField(blank=True, default='', help_text="Doctor internal clinical assessment")
@@ -57,6 +58,19 @@ class Consultation(models.Model):
             models.Index(fields=['patient', 'status']),
             models.Index(fields=['doctor', 'status']),
             models.Index(fields=['status', 'scheduled_start']),
+            models.Index(fields=['status', 'expires_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['slot'],
+                condition=models.Q(status__in=['BOOKED', 'CONFIRMED', 'IN_PROGRESS']),
+                name='unique_active_consultation_per_slot'
+            ),
+            models.UniqueConstraint(
+                fields=['doctor', 'scheduled_start'],
+                condition=models.Q(status__in=['BOOKED', 'CONFIRMED', 'IN_PROGRESS']),
+                name='unique_active_doctor_appointment_time'
+            ),
         ]
 
     def can_transition_to(self, new_status):
@@ -72,14 +86,16 @@ class Consultation(models.Model):
             self.started_at = now
         elif new_status == self.STATUS_COMPLETED:
             self.completed_at = now
+            self.expires_at = None
         elif new_status == self.STATUS_CANCELLED:
             self.cancelled_at = now
             self.cancelled_by = actor
             self.cancellation_reason = reason
-            # Release slot
-            if self.slot:
+            self.expires_at = None
+            # Release slot if in future
+            if self.slot and self.slot.start_at > now:
                 self.slot.status = 'AVAILABLE'
-                self.slot.save()
+                self.slot.save(update_fields=['status', 'updated_at'])
         self.save()
 
     def __str__(self):

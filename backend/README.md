@@ -39,9 +39,9 @@ python manage.py migrate
 python manage.py seed_data
 ```
 The seed command creates:
-- Admin: `admin@amrutam.co.in` / `AdminPassword123!`
-- Doctors: `dr.sharma@amrutam.co.in`, `dr.ananya@amrutam.co.in` / `DoctorPassword123!`
-- Patients: `patient1@example.com`, `patient2@example.com` / `PatientPassword123!`
+- Admin: `admin@amrutam.co.in` *(password configured in `.env`)*
+- Doctors: `dr.sharma@amrutam.co.in`, `dr.ananya@amrutam.co.in` *(password configured in `.env`)*
+- Patients: `patient1@example.com`, `patient2@example.com` *(password configured in `.env`)*
 - 120+ active availability slots across certified doctors.
 
 ### 4. Run Development Server
@@ -55,7 +55,7 @@ python manage.py runserver 8000
 ```bash
 pytest -v
 ```
-Runs 19 comprehensive unit, integration, RBAC security, and multi-threaded concurrency race condition tests.
+Runs 41 tests across `integration/`, `security/`, `unit/`, and `concurrency/` suites — covering authentication flows, booking business rules, RBAC isolation, TOTP MFA, doctor lifecycle, and multi-threaded race conditions.
 
 ---
 

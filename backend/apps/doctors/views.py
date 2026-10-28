@@ -6,12 +6,22 @@ from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from apps.doctors.models import DoctorProfile
-from apps.doctors.serializers import DoctorProfileSerializer, DoctorProfileUpdateSerializer
+from apps.doctors.serializers import (
+    DoctorProfileSerializer,
+    DoctorProfileUpdateSerializer,
+    DoctorRegisterSerializer,
+    DoctorRejectSerializer,
+    DoctorRemoveSerializer,
+)
+from apps.doctors.services.doctor_service import DoctorService
 from apps.availability.models import AvailabilitySlot
 from apps.availability.serializers import AvailabilitySlotSerializer, AvailabilitySlotCreateSerializer
-from apps.common.permissions import IsDoctor
+from apps.common.permissions import IsDoctor, IsAdminUserRole
 from apps.audit.utils import log_audit_event
 from apps.audit.models import AuditLog
+from apps.consultations.models import Consultation
+from django.db import transaction
+
 
 class DoctorListView(generics.ListAPIView):
     """
@@ -93,11 +103,38 @@ class DoctorAvailabilityListView(APIView):
     def get(self, request, id):
         doctor = generics.get_object_or_404(DoctorProfile, id=id)
         now = timezone.now()
+
+        # Dynamic cleanup of expired reservations for this doctor
+        expired_consultations = Consultation.objects.filter(
+            doctor=doctor,
+            status=Consultation.STATUS_BOOKED,
+            expires_at__lt=now
+        ).select_related('slot')
+
+        for exp_c in expired_consultations:
+            with transaction.atomic():
+                exp_c.status = Consultation.STATUS_CANCELLED
+                exp_c.cancellation_reason = "Reservation expired: payment was not completed within the 10-minute window."
+                exp_c.expires_at = None
+                exp_c.cancelled_at = now
+                exp_c.save(update_fields=['status', 'cancellation_reason', 'expires_at', 'cancelled_at', 'updated_at'])
+                if exp_c.slot and exp_c.slot.start_at > now:
+                    exp_c.slot.status = AvailabilitySlot.STATUS_AVAILABLE
+                    exp_c.slot.save(update_fields=['status', 'updated_at'])
+
+        # Active reservations and bookings to exclude
+        active_consultations = Consultation.objects.filter(
+            doctor=doctor,
+            status__in=[Consultation.STATUS_BOOKED, Consultation.STATUS_CONFIRMED, Consultation.STATUS_IN_PROGRESS]
+        ).exclude(status=Consultation.STATUS_BOOKED, expires_at__lt=now)
+
+        active_slot_ids = active_consultations.values_list('slot_id', flat=True)
+
         slots = AvailabilitySlot.objects.filter(
             doctor=doctor,
             status=AvailabilitySlot.STATUS_AVAILABLE,
             start_at__gte=now
-        ).order_by('start_at')
+        ).exclude(id__in=active_slot_ids).order_by('start_at')
 
         date_str = request.query_params.get('date')
         if date_str:
@@ -218,3 +255,93 @@ class DoctorSlotDetailView(APIView):
         )
 
         return Response({"success": True, "slot": AvailabilitySlotSerializer(slot).data})
+
+
+class DoctorRegisterView(APIView):
+    """
+    Public registration endpoint for medical doctors.
+    Submits registration into PENDING approval status awaiting administrator review.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @extend_schema(summary="Doctor self-registration (Pending Approval)", request=DoctorRegisterSerializer)
+    def post(self, request):
+        serializer = DoctorRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = DoctorService.register_doctor(serializer.validated_data, request=request)
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class AdminDoctorApplicationsListView(APIView):
+    """
+    Administrator endpoint to view doctor registrations and applications.
+    Supports status filtering (PENDING, APPROVED, REJECTED).
+    """
+    permission_classes = [permissions.IsAuthenticated, IsAdminUserRole]
+
+    @extend_schema(summary="List doctor applications for administrator review")
+    def get(self, request):
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            qs = DoctorProfile.objects.filter(verification_status=status_filter.upper())
+        else:
+            qs = DoctorProfile.objects.all()
+
+        qs = qs.select_related('user', 'approved_by').order_by('-created_at')
+        serializer = DoctorProfileSerializer(qs, many=True)
+        return Response({"success": True, "doctors": serializer.data}, status=status.HTTP_200_OK)
+
+
+class AdminDoctorApproveView(APIView):
+    """
+    Administrator endpoint to approve a doctor's registration.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsAdminUserRole]
+
+    @extend_schema(summary="Approve doctor registration")
+    def post(self, request, id):
+        profile = DoctorService.approve_doctor(id, request.user, request=request)
+        return Response({
+            "success": True,
+            "message": f"Dr. {profile.user.full_name} has been approved successfully.",
+            "doctor": DoctorProfileSerializer(profile).data
+        }, status=status.HTTP_200_OK)
+
+
+class AdminDoctorRejectView(APIView):
+    """
+    Administrator endpoint to reject a doctor's registration with a stated reason.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsAdminUserRole]
+
+    @extend_schema(summary="Reject doctor registration with reason", request=DoctorRejectSerializer)
+    def post(self, request, id):
+        serializer = DoctorRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = DoctorService.reject_doctor(id, request.user, serializer.validated_data['reason'], request=request)
+        return Response({
+            "success": True,
+            "message": f"Doctor registration for Dr. {profile.user.full_name} has been rejected.",
+            "doctor": DoctorProfileSerializer(profile).data
+        }, status=status.HTTP_200_OK)
+
+
+class AdminDoctorRemoveView(APIView):
+    """
+    Administrator endpoint to remove an approved doctor who is no longer working with the organization.
+    Records joining date, removal date, and marks doctor as REMOVED.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsAdminUserRole]
+
+    @extend_schema(summary="Remove/offboard doctor who is no longer with the organization", request=DoctorRemoveSerializer)
+    def post(self, request, id):
+        serializer = DoctorRemoveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reason = serializer.validated_data.get('reason', 'No longer working with the organization')
+        profile = DoctorService.remove_doctor(id, request.user, reason, request=request)
+        return Response({
+            "success": True,
+            "message": f"Dr. {profile.user.full_name} has been removed from active practice.",
+            "doctor": DoctorProfileSerializer(profile).data
+        }, status=status.HTTP_200_OK)
+

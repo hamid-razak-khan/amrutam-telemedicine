@@ -54,6 +54,6 @@ The platform handles highly sensitive clinical and financial interactions. Key a
 ---
 
 ## 6. Residual Risks & Outstanding Production Roadmap
-1. **Multi-Factor Authentication (MFA)**: Privileged `ADMIN` and `DOCTOR` accounts should require TOTP/WebAuthn hardware keys in production.
+1. **Hardware Security Keys (WebAuthn / FIDO2)**: While software-based TOTP (RFC 6238) MFA is fully implemented, hardware FIDO2 keys (e.g. YubiKey) can be added for high-security administrator accounts.
 2. **Database Encryption at Rest**: Enable AWS KMS or LUKS volume-level disk encryption for PostgreSQL persistent volumes.
-3. **Database Audit Triggers**: Add PostgreSQL row-level triggers to enforce append-only audit log rules at the database engine level in addition to application-level checks.
+3. **Database Audit Triggers**: Add PostgreSQL engine-level triggers to enforce append-only audit log rules at the storage engine level in addition to application-level checks.

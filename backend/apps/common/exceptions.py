@@ -33,13 +33,41 @@ def custom_exception_handler(exc, context):
             status=status.HTTP_409_CONFLICT
         )
 
+    if isinstance(exc, IntegrityError):
+        err_str = str(exc).lower()
+        if 'slot' in err_str or 'unique_active' in err_str or 'consultation' in err_str:
+            return Response(
+                {
+                    'success': False,
+                    'error': {
+                        'code': 'SLOT_UNAVAILABLE',
+                        'message': 'Sorry, this time slot has just been booked. Please select another available time.',
+                        'details': {'integrity_error': 'Slot conflict detected at database level.'}
+                    }
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+
     response = exception_handler(exc, context)
 
     if response is not None:
         error_code = 'API_ERROR'
         message = 'An error occurred while processing your request.'
 
-        if response.status_code == 400:
+        # Check if exception or detail defines a specific error code
+        custom_code = None
+        if hasattr(exc, 'default_code') and exc.default_code not in ('error', 'permission_denied', 'not_authenticated', 'invalid'):
+            custom_code = exc.default_code
+        elif hasattr(exc, 'code') and exc.code not in ('error', 'permission_denied', 'not_authenticated', 'invalid'):
+            custom_code = exc.code
+        elif isinstance(response.data, dict) and 'detail' in response.data and hasattr(response.data['detail'], 'code'):
+            detail_code = response.data['detail'].code
+            if detail_code and detail_code not in ('error', 'permission_denied', 'not_authenticated', 'invalid'):
+                custom_code = str(detail_code).upper()
+
+        if custom_code:
+            error_code = custom_code
+        elif response.status_code == 400:
             error_code = 'VALIDATION_ERROR'
             message = 'Invalid request payload or parameters.'
         elif response.status_code == 401:

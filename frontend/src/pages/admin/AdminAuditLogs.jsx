@@ -75,11 +75,11 @@ export const AdminAuditLogs = () => {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm flex flex-wrap items-center gap-4">
+      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
         <select
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
-          className="px-3.5 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 text-stone-700"
+          className="w-full sm:w-auto px-3.5 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 text-stone-700"
         >
           <option value="">All Actions</option>
           <option value="AUTH_LOGIN">AUTH_LOGIN</option>
@@ -97,7 +97,7 @@ export const AdminAuditLogs = () => {
         <select
           value={resourceFilter}
           onChange={(e) => setResourceFilter(e.target.value)}
-          className="px-3.5 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 text-stone-700"
+          className="w-full sm:w-auto px-3.5 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 text-stone-700"
         >
           <option value="">All Resource Types</option>
           <option value="USER">USER</option>
@@ -119,7 +119,7 @@ export const AdminAuditLogs = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[780px] text-left text-xs">
               <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 uppercase font-semibold">
                 <tr>
                   <th className="py-3 px-4">Timestamp (UTC)</th>
@@ -188,8 +188,8 @@ export const AdminAuditLogs = () => {
 
       {/* Audit Detail Modal */}
       {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 relative animate-in fade-in duration-200 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 max-h-[85vh] overflow-y-auto shadow-2xl border border-stone-200 relative animate-in fade-in duration-200 space-y-4">
             
             <button
               onClick={() => setSelectedLog(null)}
@@ -202,7 +202,7 @@ export const AdminAuditLogs = () => {
               <div className="text-xs font-bold text-[#2B5B41] uppercase tracking-wider">
                 Audit Log Inspection
               </div>
-              <h3 className="text-lg font-bold font-heading text-stone-900 mt-1">
+              <h3 className="text-lg font-bold font-heading text-stone-900 mt-1 break-all">
                 {selectedLog.action}
               </h3>
             </div>
@@ -210,15 +210,15 @@ export const AdminAuditLogs = () => {
             <div className="space-y-2 text-xs">
               <div className="flex justify-between py-1 border-b border-stone-100">
                 <span className="text-stone-500 font-medium">Log ID:</span>
-                <span className="font-mono text-stone-800">{selectedLog.id}</span>
+                <span className="font-mono text-stone-800 break-all">{selectedLog.id}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-stone-100">
                 <span className="text-stone-500 font-medium">Request ID:</span>
-                <span className="font-mono text-stone-800">{selectedLog.request_id || 'N/A'}</span>
+                <span className="font-mono text-stone-800 break-all">{selectedLog.request_id || 'N/A'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-stone-100">
                 <span className="text-stone-500 font-medium">Resource ID:</span>
-                <span className="font-mono text-stone-800">{selectedLog.resource_id || 'N/A'}</span>
+                <span className="font-mono text-stone-800 break-all">{selectedLog.resource_id || 'N/A'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-stone-100">
                 <span className="text-stone-500 font-medium">Timestamp:</span>
@@ -230,7 +230,7 @@ export const AdminAuditLogs = () => {
               <div className="text-xs font-bold uppercase tracking-wider text-stone-600 mb-2">
                 Sanitized Metadata
               </div>
-              <pre className="p-3 bg-stone-900 text-emerald-400 rounded-xl text-[11px] overflow-x-auto font-mono">
+              <pre className="p-3 bg-stone-900 text-emerald-400 rounded-xl text-[11px] overflow-x-auto font-mono whitespace-pre-wrap break-all">
                 {JSON.stringify(selectedLog.sanitized_metadata || {}, null, 2)}
               </pre>
             </div>

@@ -128,13 +128,13 @@ export const DoctorAvailabilityManager = () => {
       )}
 
       {/* Create New Slot Card */}
-      <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm space-y-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-stone-200 shadow-sm space-y-4">
         <h3 className="text-base font-bold font-heading text-stone-900 flex items-center gap-2">
           <Plus className="w-4 h-4 text-[#2B5B41]" />
           <span>Add New Availability Slot</span>
         </h3>
 
-        <form onSubmit={handleCreateSlot} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+        <form onSubmit={handleCreateSlot} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-end">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-stone-600 mb-1">
               Date
@@ -189,7 +189,7 @@ export const DoctorAvailabilityManager = () => {
 
       {/* Existing Slots Table */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-stone-100 flex items-center justify-between">
+        <div className="p-4 sm:p-6 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <h3 className="text-base font-bold font-heading text-stone-900">
             Scheduled Availability Calendar ({slots.length} total slots)
           </h3>
@@ -203,7 +203,7 @@ export const DoctorAvailabilityManager = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[560px] text-left text-xs">
               <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 uppercase font-semibold">
                 <tr>
                   <th className="py-3 px-4">Date</th>

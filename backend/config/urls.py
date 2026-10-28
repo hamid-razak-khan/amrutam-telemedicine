@@ -10,6 +10,11 @@ from apps.accounts.views import (
     LogoutView,
     CurrentUserView,
     UserProfileView,
+    MFASetupView,
+    MFAConfirmView,
+    MFAVerifyLoginView,
+    MFADisableView,
+    MFAStatusView,
 )
 from apps.doctors.views import (
     DoctorListView,
@@ -18,6 +23,11 @@ from apps.doctors.views import (
     DoctorProfileMeView,
     DoctorMyAvailabilityView,
     DoctorSlotDetailView,
+    DoctorRegisterView,
+    AdminDoctorApplicationsListView,
+    AdminDoctorApproveView,
+    AdminDoctorRejectView,
+    AdminDoctorRemoveView,
 )
 from apps.bookings.views import (
     BookingListCreateView,
@@ -48,15 +58,25 @@ from apps.audit.views import (
 )
 
 api_v1_patterns = [
-    # Auth
+    # Auth & Registration
     path('auth/register', RegisterView.as_view(), name='auth-register'),
+    path('auth/register-doctor', DoctorRegisterView.as_view(), name='auth-register-doctor'),
     path('auth/login', LoginView.as_view(), name='auth-login'),
     path('auth/refresh', TokenRefreshView.as_view(), name='auth-refresh'),
     path('auth/logout', LogoutView.as_view(), name='auth-logout'),
     path('auth/me', CurrentUserView.as_view(), name='auth-me'),
 
+    # Multi-Factor Authentication (MFA)
+    path('auth/mfa/setup', MFASetupView.as_view(), name='auth-mfa-setup'),
+    path('auth/mfa/confirm', MFAConfirmView.as_view(), name='auth-mfa-confirm'),
+    path('auth/mfa/verify', MFAVerifyLoginView.as_view(), name='auth-mfa-verify'),
+    path('auth/mfa/verify-login', MFAVerifyLoginView.as_view(), name='auth-mfa-verify-login'),
+    path('auth/mfa/disable', MFADisableView.as_view(), name='auth-mfa-disable'),
+    path('auth/mfa/status', MFAStatusView.as_view(), name='auth-mfa-status'),
+
     # Users
     path('users/me', UserProfileView.as_view(), name='users-me'),
+
 
     # Doctors
     path('doctors', DoctorListView.as_view(), name='doctor-list'),
@@ -84,13 +104,19 @@ api_v1_patterns = [
 
     # Payments
     path('payments', PaymentInitiateView.as_view(), name='payment-initiate'),
+    path('payments/initiate', PaymentInitiateView.as_view(), name='payment-initiate-alias'),
     path('payments/<uuid:id>', PaymentDetailView.as_view(), name='payment-detail'),
 
     # Administration
     path('admin/analytics/overview', AdminAnalyticsOverviewView.as_view(), name='admin-analytics-overview'),
     path('admin/analytics/consultations', AdminAnalyticsConsultationsView.as_view(), name='admin-analytics-consultations'),
     path('admin/audit-logs', AdminAuditLogListView.as_view(), name='admin-audit-logs'),
+    path('admin/doctors', AdminDoctorApplicationsListView.as_view(), name='admin-doctor-applications'),
+    path('admin/doctors/<uuid:id>/approve', AdminDoctorApproveView.as_view(), name='admin-doctor-approve'),
+    path('admin/doctors/<uuid:id>/reject', AdminDoctorRejectView.as_view(), name='admin-doctor-reject'),
+    path('admin/doctors/<uuid:id>/remove', AdminDoctorRemoveView.as_view(), name='admin-doctor-remove'),
 ]
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),

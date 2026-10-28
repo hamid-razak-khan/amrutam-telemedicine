@@ -4,16 +4,19 @@ from datetime import timedelta
 import dj_database_url
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables
+load_dotenv(BASE_DIR / '.env')
+load_dotenv()
 
 # Security
 SECRET_KEY = os.getenv('SECRET_KEY', 'amrutam-telemedicine-dev-insecure-secret-key-32charslong!')
 DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 't')
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')]
+ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0,testserver').split(',')]
+if 'testserver' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('testserver')
 
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
@@ -90,15 +93,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # Database Configuration
-# Uses PostgreSQL if DATABASE_URL is defined, else SQLite with concurrency-safe WAL settings
-db_engine_override = os.getenv('DB_ENGINE', '').lower()
+# Supabase PostgreSQL configuration with SSL and automatic IPv6 -> Session Pooler fallback support
+db_engine_override = os.getenv('DB_ENGINE', 'postgres').lower()
 database_url = os.getenv('DATABASE_URL')
+db_host = os.getenv('DB_HOST', '')
+use_db_pooler = os.getenv('USE_DB_POOLER', 'False').lower() in ('true', '1', 'yes')
 
-if database_url and db_engine_override != 'sqlite':
-    DATABASES = {
-        'default': dj_database_url.parse(database_url, conn_max_age=600)
-    }
-else:
+if db_engine_override == 'sqlite' and not (db_host and db_engine_override in ('postgres', 'postgresql')):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -108,6 +109,49 @@ else:
             }
         }
     }
+elif database_url:
+    DATABASES = {
+        'default': dj_database_url.parse(
+            database_url,
+            conn_max_age=int(os.getenv('DB_CONN_MAX_AGE', '600')),
+            ssl_require=True
+        )
+    }
+    DATABASES['default'].setdefault('OPTIONS', {})['sslmode'] = os.getenv('DB_SSLMODE', 'require')
+else:
+    # Direct vs Supabase Session Pooler connection resolution
+    # Direct Supabase endpoints (db.<ref>.supabase.co:5432) resolve to IPv6 only.
+    # If IPv6 routing is unavailable or USE_DB_POOLER=True, route to Supabase Session Pooler (port 5432).
+    pooler_host = os.getenv('DB_POOLER_HOST', 'aws-0-ap-northeast-2.pooler.supabase.com')
+    pooler_port = os.getenv('DB_POOLER_PORT', '5432')  # Session pooler port
+    pooler_user = os.getenv('DB_POOLER_USER', 'postgres.hsmnnakttfzddyzixdkm')
+
+    if use_db_pooler:
+        active_host = pooler_host
+        active_port = pooler_port
+        active_user = pooler_user
+    else:
+        active_host = db_host or 'db.hsmnnakttfzddyzixdkm.supabase.co'
+        active_port = os.getenv('DB_PORT', '5432')
+        active_user = os.getenv('DB_USER', 'postgres')
+
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'postgres'),
+            'USER': active_user,
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': active_host,
+            'PORT': active_port,
+            'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '600')),
+            'OPTIONS': {
+                'sslmode': os.getenv('DB_SSLMODE', 'require'),
+                'connect_timeout': int(os.getenv('DB_CONNECT_TIMEOUT', '10')),
+            }
+        }
+    }
+
 
 from django.db.backends.signals import connection_created
 
@@ -190,6 +234,12 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
+# Multi-Factor Authentication (MFA) Configuration
+MFA_ENCRYPTION_KEY = os.getenv('MFA_ENCRYPTION_KEY')
+MFA_ISSUER_NAME = os.getenv('MFA_ISSUER_NAME', 'Amrutam Telemedicine')
+MFA_CHALLENGE_TIMEOUT_MINUTES = int(os.getenv('MFA_CHALLENGE_TIMEOUT_MINUTES', '5'))
+
+
 # drf-spectacular OpenAPI 3.0 Documentation
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Amrutam Telemedicine Platform API',
@@ -201,8 +251,14 @@ SPECTACULAR_SETTINGS = {
 }
 
 # CORS Configuration
-cors_origins_raw = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173')
+cors_origins_raw = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:5173,http://127.0.0.1:5173')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_raw.split(',') if origin.strip()]
+if DEBUG:
+    # Allow all localhost and 127.0.0.1 ports during local development
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://localhost:\d+$",
+        r"^http://127\.0\.0\.1:\d+$",
+    ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     'accept',

@@ -26,6 +26,13 @@ from apps.common.idempotency import (
 )
 from apps.audit.utils import log_audit_event
 from apps.audit.models import AuditLog
+from django.db import IntegrityError
+from rest_framework.exceptions import NotFound, ValidationError
+from apps.bookings.services.booking_service import (
+    BookingService,
+    SlotUnavailableError,
+    SlotExpiredError
+)
 
 class BookingListCreateView(APIView):
     """
@@ -88,96 +95,56 @@ class BookingListCreateView(APIView):
                 {"success": False, "error": {"code": "IDEMPOTENCY_CONFLICT", "message": str(e)}},
                 status=e.code
             )
-
         try:
-            with transaction.atomic():
-                # Acquire pessimistic row lock on the availability slot
-                slot = AvailabilitySlot.objects.select_for_update().select_related('doctor', 'doctor__user').filter(id=slot_id).first()
+            booking, consultation, payment = BookingService.create_booking(
+                patient_user=request.user,
+                slot_id=slot_id,
+                chief_complaint=chief_complaint,
+                idempotency_key=idempotency_key,
+                request=request
+            )
 
-                if not slot:
-                    fail_idempotency(key_record)
-                    return Response(
-                        {"success": False, "error": {"code": "NOT_FOUND", "message": "The specified availability slot does not exist."}},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
+            response_data = {
+                "success": True,
+                "message": "Appointment booked successfully.",
+                "booking": ConsultationSerializer(consultation).data
+            }
 
-                if slot.status != AvailabilitySlot.STATUS_AVAILABLE:
-                    fail_idempotency(key_record)
-                    return Response(
-                        {"success": False, "error": {"code": "SLOT_UNAVAILABLE", "message": "This slot has already been booked or is no longer available."}},
-                        status=status.HTTP_409_CONFLICT
-                    )
+            # Mark idempotency record as completed
+            complete_idempotency(key_record, status.HTTP_201_CREATED, response_data)
 
-                if slot.start_at < timezone.now():
-                    fail_idempotency(key_record)
-                    return Response(
-                        {"success": False, "error": {"code": "SLOT_EXPIRED", "message": "Cannot book a time slot in the past."}},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+            return Response(response_data, status=status.HTTP_201_CREATED)
 
-                # Atomically claim slot
-                slot.status = AvailabilitySlot.STATUS_BOOKED
-                slot.save(update_fields=['status', 'updated_at'])
-
-                # Generate unique booking reference
-                booking_ref = f"AMR-{timezone.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
-
-                # Create Consultation record
-                consultation = Consultation.objects.create(
-                    booking_reference=booking_ref,
-                    patient=request.user,
-                    doctor=slot.doctor,
-                    slot=slot,
-                    scheduled_start=slot.start_at,
-                    scheduled_end=slot.end_at,
-                    status=Consultation.STATUS_BOOKED,
-                    chief_complaint=chief_complaint
-                )
-
-                # Create Booking association
-                booking = Booking.objects.create(
-                    consultation=consultation,
-                    idempotency_key=idempotency_key
-                )
-
-                # Initialize Payment record (simulated gateway)
-                Payment.objects.create(
-                    consultation=consultation,
-                    patient=request.user,
-                    amount=slot.doctor.consultation_fee,
-                    currency='INR',
-                    status=Payment.STATUS_PENDING,
-                    provider='SIMULATED_GATEWAY',
-                    provider_reference=f"SIM_PAY_{uuid.uuid4().hex[:10].upper()}"
-                )
-
-                response_data = {
-                    "success": True,
-                    "message": "Appointment booked successfully.",
-                    "booking": ConsultationSerializer(consultation).data
-                }
-
-                # Mark idempotency record as completed
-                complete_idempotency(key_record, status.HTTP_201_CREATED, response_data)
-
-                # Record audit log
-                log_audit_event(
-                    action='BOOKING_CREATED',
-                    resource_type='CONSULTATION',
-                    resource_id=str(consultation.id),
-                    actor=request.user,
-                    request=request,
-                    outcome=AuditLog.OUTCOME_SUCCESS,
-                    metadata={
-                        'booking_reference': booking_ref,
-                        'doctor_id': str(slot.doctor.id),
-                        'slot_id': str(slot.id),
-                        'idempotency_key': idempotency_key
-                    }
-                )
-
-                return Response(response_data, status=status.HTTP_201_CREATED)
-
+        except SlotUnavailableError as e:
+            fail_idempotency(key_record)
+            return Response(
+                {"success": False, "error": {"code": "SLOT_UNAVAILABLE", "message": "Sorry, this time slot has just been booked. Please select another available time."}},
+                status=status.HTTP_409_CONFLICT
+            )
+        except SlotExpiredError as e:
+            fail_idempotency(key_record)
+            return Response(
+                {"success": False, "error": {"code": "SLOT_EXPIRED", "message": str(e)}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except NotFound as e:
+            fail_idempotency(key_record)
+            return Response(
+                {"success": False, "error": {"code": "NOT_FOUND", "message": str(e)}},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except ValidationError as e:
+            fail_idempotency(key_record)
+            return Response(
+                {"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(e)}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except IntegrityError:
+            fail_idempotency(key_record)
+            return Response(
+                {"success": False, "error": {"code": "SLOT_UNAVAILABLE", "message": "Sorry, this time slot has just been booked. Please select another available time."}},
+                status=status.HTTP_409_CONFLICT
+            )
         except Exception as e:
             fail_idempotency(key_record)
             log_audit_event(

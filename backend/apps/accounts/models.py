@@ -107,3 +107,70 @@ class PatientProfile(models.Model):
 
     def __str__(self):
         return f"Patient Profile: {self.user.email}"
+
+
+class UserMFA(models.Model):
+    """
+    Stores TOTP-based Multi-Factor Authentication configuration.
+    The TOTP base32 secret is encrypted at rest using application-level Fernet encryption.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='mfa_settings')
+    encrypted_secret = models.TextField(help_text="Fernet-encrypted TOTP base32 secret")
+    is_enabled = models.BooleanField(default=False, db_index=True)
+    enabled_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User MFA Settings'
+        verbose_name_plural = 'User MFA Settings'
+
+    def __str__(self):
+        return f"MFA ({'Enabled' if self.is_enabled else 'Disabled'}) for {self.user.email}"
+
+
+class MFARecoveryCode(models.Model):
+    """
+    Stores single-use hashed recovery backup codes for MFA accounts.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_recovery_codes')
+    hashed_code = models.CharField(max_length=128)
+    is_used = models.BooleanField(default=False)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'MFA Recovery Code'
+        verbose_name_plural = 'MFA Recovery Codes'
+        indexes = [
+            models.Index(fields=['user', 'is_used']),
+        ]
+
+    def __str__(self):
+        return f"Recovery Code ({'Used' if self.is_used else 'Available'}) for {self.user.email}"
+
+
+class MFAChallenge(models.Model):
+    """
+    Tracks ephemeral, short-lived MFA login challenge tokens.
+    Does not grant API access; valid only for second-factor verification.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_challenges')
+    token = models.CharField(max_length=128, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'MFA Challenge'
+        verbose_name_plural = 'MFA Challenges'
+        indexes = [
+            models.Index(fields=['token', 'is_used', 'expires_at']),
+        ]
+
+    def __str__(self):
+        return f"MFA Challenge for {self.user.email} (expires {self.expires_at})"

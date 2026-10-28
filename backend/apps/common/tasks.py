@@ -61,3 +61,44 @@ def send_appointment_reminders(self):
     except Exception as exc:
         logger.error(f"Error dispatching appointment reminders: {exc}")
         raise self.retry(exc=exc)
+
+@shared_task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    retry_backoff=True
+)
+def release_expired_reservations_task(self):
+    """
+    Periodic task to release expired pending-payment reservations and return slots to AVAILABLE status.
+    """
+    from django.db import transaction
+    from apps.consultations.models import Consultation
+    from apps.availability.models import AvailabilitySlot
+    try:
+        now = timezone.now()
+        expired_consultations = Consultation.objects.filter(
+            status=Consultation.STATUS_BOOKED,
+            expires_at__lt=now
+        ).select_related('slot')
+
+        released_count = 0
+        for consultation in expired_consultations:
+            with transaction.atomic():
+                consultation.status = Consultation.STATUS_CANCELLED
+                consultation.cancellation_reason = "Reservation expired: payment was not completed within the 10-minute window."
+                consultation.expires_at = None
+                consultation.cancelled_at = now
+                consultation.save(update_fields=['status', 'cancellation_reason', 'expires_at', 'cancelled_at', 'updated_at'])
+
+                if consultation.slot and consultation.slot.start_at > now:
+                    consultation.slot.status = AvailabilitySlot.STATUS_AVAILABLE
+                    consultation.slot.save(update_fields=['status', 'updated_at'])
+
+                released_count += 1
+                logger.info(f"Released expired reservation for booking {consultation.booking_reference}")
+
+        return {"status": "SUCCESS", "released_count": released_count}
+    except Exception as exc:
+        logger.error(f"Error releasing expired reservations: {exc}")
+        raise self.retry(exc=exc)

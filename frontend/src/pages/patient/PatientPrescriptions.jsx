@@ -71,11 +71,11 @@ export const PatientPrescriptions = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {prescriptions.map((presc) => (
             <div
               key={presc.id}
-              className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm hover:shadow-md transition-shadow space-y-4"
+              className="bg-white p-4 sm:p-6 rounded-2xl border border-stone-200 shadow-sm hover:shadow-md transition-shadow space-y-4"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -127,12 +127,12 @@ export const PatientPrescriptions = () => {
 
       {/* Prescription Detail Modal */}
       {selectedPrescription && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-8 shadow-2xl border border-stone-200 relative animate-in fade-in duration-200 space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 md:p-8 shadow-2xl border border-stone-200 relative animate-in fade-in duration-200 space-y-5 sm:space-y-6 max-h-[92vh] overflow-y-auto">
             
             <button
               onClick={() => setSelectedPrescription(null)}
-              className="absolute right-6 top-6 p-1.5 rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              className="absolute right-4 top-4 sm:right-6 sm:top-6 p-1.5 rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700"
             >
               <X className="w-5 h-5" />
             </button>
@@ -158,7 +158,7 @@ export const PatientPrescriptions = () => {
                 Prescribed Herbal Formulations & Dosages
               </h4>
               <div className="overflow-x-auto border border-stone-200 rounded-xl">
-                <table className="w-full text-left text-xs">
+                <table className="w-full min-w-[480px] text-left text-xs">
                   <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 uppercase font-semibold">
                     <tr>
                       <th className="py-2.5 px-3">Medicine / Churna</th>

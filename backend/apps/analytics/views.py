@@ -79,27 +79,50 @@ class AdminAnalyticsConsultationsView(APIView):
         ]
     )
     def get(self, request):
-        days = int(request.query_params.get('days', 14))
+        from collections import defaultdict
+
+        try:
+            days = int(request.query_params.get('days', 14))
+        except (ValueError, TypeError):
+            days = 14
+
+        days = max(1, min(days, 90))
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=days - 1)
+
+        # Single query spanning the entire date range
+        consultations = Consultation.objects.filter(
+            scheduled_start__date__gte=start_date,
+            scheduled_start__date__lte=end_date
+        ).values('scheduled_start__date', 'status')
+
+        day_stats = defaultdict(lambda: {'total': 0, 'completed': 0, 'cancelled': 0, 'booked': 0})
+        for c in consultations:
+            d_val = c.get('scheduled_start__date')
+            if d_val:
+                d_str = d_val.strftime("%Y-%m-%d")
+                day_stats[d_str]['total'] += 1
+                st = c.get('status')
+                if st == Consultation.STATUS_COMPLETED:
+                    day_stats[d_str]['completed'] += 1
+                elif st == Consultation.STATUS_CANCELLED:
+                    day_stats[d_str]['cancelled'] += 1
+                elif st in (Consultation.STATUS_BOOKED, Consultation.STATUS_CONFIRMED):
+                    day_stats[d_str]['booked'] += 1
 
         daily_data = []
         for i in range(days):
             current_date = start_date + timedelta(days=i)
-            day_consultations = Consultation.objects.filter(scheduled_start__date=current_date)
-
-            total = day_consultations.count()
-            completed = day_consultations.filter(status=Consultation.STATUS_COMPLETED).count()
-            cancelled = day_consultations.filter(status=Consultation.STATUS_CANCELLED).count()
-            booked = day_consultations.filter(status__in=[Consultation.STATUS_BOOKED, Consultation.STATUS_CONFIRMED]).count()
-
+            d_str = current_date.strftime("%Y-%m-%d")
+            stats = day_stats[d_str]
             daily_data.append({
-                "date": current_date.strftime("%Y-%m-%d"),
+                "date": d_str,
                 "display_date": current_date.strftime("%b %d"),
-                "total": total,
-                "completed": completed,
-                "cancelled": cancelled,
-                "booked": booked
+                "total": stats['total'],
+                "completed": stats['completed'],
+                "cancelled": stats['cancelled'],
+                "booked": stats['booked']
             })
 
         return Response({"success": True, "trends": daily_data}, status=status.HTTP_200_OK)
+

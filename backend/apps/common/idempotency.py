@@ -89,7 +89,7 @@ def complete_idempotency(key_record, response_code, response_data):
         try:
             key_record.status = IdempotencyKey.STATUS_COMPLETED
             key_record.response_code = response_code
-            key_record.response_body = response_data
+            key_record.response_body = json.loads(json.dumps(response_data, default=str))
             key_record.save(update_fields=['status', 'response_code', 'response_body', 'updated_at'])
         except Exception:
             pass

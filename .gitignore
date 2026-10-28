@@ -25,6 +25,8 @@ wheels/
 *.egg
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3-shm
+db.sqlite3-wal
 
 # Celery & logs
 celerybeat-schedule
@@ -34,7 +36,10 @@ celerybeat-schedule
 .env
 .env.local
 .env.*.local
+backend/.env
+frontend/.env
 !.env.example
+
 
 # Node / React
 frontend/node_modules/

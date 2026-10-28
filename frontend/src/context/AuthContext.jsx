@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getCurrentUser, login as apiLogin, logout as apiLogout } from '../api/auth';
+import { getCurrentUser, login as apiLogin, logout as apiLogout, verifyMfaLogin } from '../api/auth';
+
 
 const AuthContext = createContext(null);
 
@@ -41,6 +42,9 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     try {
       const data = await apiLogin({ email, password });
+      if (data.mfa_required) {
+        return { mfa_required: true, mfa_token: data.mfa_token, message: data.message };
+      }
       sessionStorage.setItem('amrutam_access_token', data.access);
       sessionStorage.setItem('amrutam_refresh_token', data.refresh);
       setUser(data.user);
@@ -49,6 +53,20 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(false);
     }
   };
+
+  const verifyMfa = async (mfa_token, code) => {
+    setIsLoading(true);
+    try {
+      const data = await verifyMfaLogin({ mfa_token, code });
+      sessionStorage.setItem('amrutam_access_token', data.access);
+      sessionStorage.setItem('amrutam_refresh_token', data.refresh);
+      setUser(data.user);
+      return data.user;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const logout = async () => {
     const refreshToken = sessionStorage.getItem('amrutam_refresh_token');
@@ -79,9 +97,11 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     isLoading,
     login,
+    verifyMfa,
     logout,
     refreshUser,
   };
+
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
